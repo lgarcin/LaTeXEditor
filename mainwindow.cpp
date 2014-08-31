@@ -1,51 +1,76 @@
 #include "mainwindow.h"
-#include "latexlexer.h"
 #include <QMenuBar>
 #include <QFileDialog>
 #include <QDebug>
-#include <Qsci/qscilexertex.h>
-#include <Qsci/qsciapis.h>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
-    initializeUI();
+    setWindowTitle("LaTeX Editor");
+    initializeMenu();
     initializeEditor();
+    initializeOutline();
 }
 
 MainWindow::~MainWindow()
 {
 }
 
-void MainWindow::initializeUI()
+void MainWindow::initializeMenu()
 {
-    setWindowTitle("My Code Editor");
     setMenuBar(new QMenuBar(this));
 
-    QMenu *fileMenu = menuBar()->addMenu("&File");
+    fileMenu = menuBar()->addMenu("&File");
+    fileMenu->addAction("&New", this, SLOT(onNew()), QKeySequence::New);
     fileMenu->addAction("&Open", this, SLOT(onOpen()), QKeySequence::Open);
     fileMenu->addAction("&Save as",this,SLOT(onSave()),QKeySequence::SaveAs);
 
-    QMenu *buildMenu=menuBar()->addMenu("&Build");
+    buildMenu=menuBar()->addMenu("&Build");
     buildMenu->addAction("&Build",this,SLOT(onBuild()));
 
+    viewMenu=menuBar()->addMenu(tr("&View"));
+}
 
-    editor = new QsciScintilla(this);
-    setCentralWidget(editor);
-    connect(editor,SIGNAL(SCN_AUTOCSELECTION(const char*,int)),this,SLOT(postProcessAutocomplete(const char*,int)),Qt::QueuedConnection);
+void MainWindow::initializeEditor()
+{
+    editorTabs=new QTabWidget(this);
+    editorTabs->setTabsClosable(true);
+    connect(editorTabs,SIGNAL(tabCloseRequested(int)),this,SLOT(closeTab(int)));
+    setCentralWidget(editorTabs);
+    onNew();
+}
+
+void MainWindow::initializeOutline()
+{
+    outlineDock=new QDockWidget(tr("Outline"),this);
+    outlineDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    outlineView=new QTreeView(outlineDock);
+    OutlineModel *outline=((LatexEditor*)editorTabs->currentWidget())->getOutline();
+    outlineView->setModel(outline);
+    outlineDock->setWidget(outlineView);
+    addDockWidget(Qt::LeftDockWidgetArea,outlineDock);
+    viewMenu->addAction(outlineDock->toggleViewAction());
+    connect(editorTabs,SIGNAL(currentChanged(int)),this,SLOT(setOutline(int)));
+}
+
+void MainWindow::onNew()
+{
+    LatexEditor *editor=new LatexEditor(this);
+    editorTabs->addTab(editor,"test");
+    editorTabs->setCurrentWidget(editor);
 }
 
 void MainWindow::onOpen()
 {
-    QString filename =  QFileDialog::getOpenFileName(this, tr("Open .cpp file"),
-                                                     QDir::currentPath(),
-                                                    "CPP (*.cpp *.h *.cxx)");
+    QString filename =  QFileDialog::getOpenFileName(this, tr("Open .tex file"),QDir::currentPath(),"TEX (*.tex *.sty)");
     if (filename.isEmpty())
         return;
     QFile file(filename);
     if (!file.open(QIODevice::ReadOnly))
         return;
+    LatexEditor *editor=new LatexEditor(this);
     editor->setText(file.readAll());
+    editorTabs->addTab(editor,QFileInfo(file).fileName());
+    editorTabs->setCurrentWidget(editor);
     file.close();
 }
 
@@ -57,83 +82,19 @@ void MainWindow::onBuild()
 {
 }
 
-void MainWindow::initializeEditor()
+void MainWindow::closeTab(int i)
 {
-    // codes based from http://eli.thegreenplace.net/2011/04/01/sample-using-qscintilla-with-pyqt/
-    initializeFont();
-    initializeMargin();
-    initializeCaretLine();
-    initializeLexer();
-    // code based on QSciTE https://code.google.com/p/qscite/
-    initializeFolding();
+    LatexEditor *editor=(LatexEditor*)editorTabs->widget(i);
+    editorTabs->removeTab(i);
+    delete editor;
 }
 
-void MainWindow::initializeFont()
+void MainWindow::setOutline(int i)
 {
-    QFont font("Courier", 12);
-    font.setFixedPitch(true);
-    editor->setFont(font);
-}
-
-void MainWindow::initializeMargin()
-{
-    QFontMetrics fontmetrics = QFontMetrics(editor->font());
-    editor->setMarginsFont(editor->font());
-    editor->setMarginWidth(0, fontmetrics.width(QString::number(editor->lines())) + 6);
-    editor->setMarginLineNumbers(0, true);
-    editor->setMarginsBackgroundColor(QColor("#cccccc"));
-
-    connect(editor, SIGNAL(textChanged()), this, SLOT(onTextChanged()));
-}
-
-void MainWindow::onTextChanged()
-{
-    QFontMetrics fontmetrics = editor->fontMetrics();
-    editor->setMarginWidth(0, fontmetrics.width(QString::number(editor->lines())) + 6);
-}
-
-void MainWindow::initializeLexer()
-{
-    LatexLexer *lexer=new LatexLexer();
-    //QsciLexerTeX *lexer = new QsciLexerTeX();
-    //lexer->setDefaultFont(editor->font());
-    //lexer->setFoldComments(true);
-    QsciAPIs* apis = new QsciAPIs(lexer);
-    apis->add("\\test");
-    apis->add("test123");
-    apis->add("foobar");
-    apis->prepare();
-    editor->setLexer(lexer);
-    editor->setAutoCompletionThreshold(3);
-    editor->setAutoCompletionSource(QsciScintilla::AcsAPIs);
-}
-
-void MainWindow::initializeCaretLine()
-{
-    // Current line visible with special background color
-    editor->setCaretLineVisible(true);
-    editor->setCaretLineBackgroundColor(QColor("#ffe4e4"));
-}
-
-void MainWindow::initializeFolding()
-{
-    QsciScintilla::FoldStyle state =
-            static_cast<QsciScintilla::FoldStyle>((!editor->folding()) * 5);
-    if (!state)
-        editor->foldAll(false);
-    editor->setFolding(state);
-}
-
-void MainWindow::postProcessAutocomplete(const char *sel,int pos)
-{
-    QString cp=QString(sel);
-    if(!cp.startsWith("\\")){
-        int line,index;
-        editor->insert("}\n");
-        editor->insert(cp);
-        editor->insert("}\n\n\\end{");
-        editor->lineIndexFromPosition(pos,&line,&index);
-        editor->insertAt("\\begin{",line,index);
-        editor->SendScintilla(QsciScintillaBase::SCI_LINEDOWN);
+    if(i!=-1){
+        outlineView->setModel(((LatexEditor*)editorTabs->widget(i))->getOutline());
+    }
+    else{
+        outlineView->setModel(new OutlineModel());
     }
 }

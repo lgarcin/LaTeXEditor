@@ -2,7 +2,10 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <Qsci/qsciscintilla.h>
+#include <QDockWidget>
+#include <QTreeView>
+
+#include "latexeditor.h"
 
 class MainWindow : public QMainWindow
 {
@@ -11,21 +14,26 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = 0);
     ~MainWindow();
-    void initializeUI();
+    void initializeMenu();
     void initializeEditor();
-    void initializeLexer();
-    void initializeFolding();
-    void initializeMargin();
-    void initializeCaretLine();
-    void initializeFont();
+    void initializeOutline();
+
 public slots:
-    void onTextChanged();
+    void onNew();
     void onOpen();
     void onSave();
     void onBuild();
-    void postProcessAutocomplete(const char* sel,int pos);
+    void closeTab(int i);
+    void setOutline(int i);
+
 private:
-    QsciScintilla *editor;
+    QMenu *fileMenu;
+    QMenu *buildMenu;
+    QMenu *viewMenu;
+
+    QTabWidget *editorTabs;
+    QDockWidget *outlineDock;
+    QTreeView *outlineView;
 };
 
 #endif // MAINWINDOW_H

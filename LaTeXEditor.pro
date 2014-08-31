@@ -14,10 +14,14 @@ TEMPLATE = app
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    latexlexer.cpp
+    latexlexer.cpp \
+    latexeditor.cpp \
+    outline.cpp
 
 HEADERS  += mainwindow.h \
-    latexlexer.h
+    latexlexer.h \
+    latexeditor.h \
+    outline.h
 
 FORMS    += mainwindow.ui
 
